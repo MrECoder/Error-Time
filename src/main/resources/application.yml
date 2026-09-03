@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: error-time
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+
+downstream:
+  service:
+    url: ${DOWNSTREAM_SERVICE_URL:http://localhost:9090}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
+# Subtask 9: every line (app or framework) carries the current traceId/spanId
+# so log lines can be correlated with the traceId a client sees in a
+# ProblemDetail response or that a downstream service was sent.
+logging:
+  pattern:
+    level: "%5p [${spring.application.name},%X{traceId:-},%X{spanId:-}]"
+  level:
+    com.mrecoder.errortime: INFO
