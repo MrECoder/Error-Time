@@ -106,6 +106,26 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration>
+          <!-- StructuredTaskScope/Joiner (java.util.concurrent) is still a
+               preview API in JDK 25 (JEP 505); mvn spring-boot:run needs the
+               same flag the compiler and packaged jar need. -->
+          <jvmArguments>--enable-preview</jvmArguments>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <enablePreview>true</enablePreview>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <argLine>--enable-preview</argLine>
+        </configuration>
       </plugin>
     </plugins>
   </build>

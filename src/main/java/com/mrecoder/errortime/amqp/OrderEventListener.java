@@ -3,6 +3,8 @@ package com.mrecoder.errortime.amqp;
 import com.mrecoder.errortime.exception.AppException;
 import com.mrecoder.errortime.exception.InternalServiceException;
 import com.mrecoder.errortime.exception.ValidationException;
+import com.mrecoder.errortime.feign.DownstreamService;
+import com.mrecoder.errortime.feign.ResourceResponse;
 import com.mrecoder.errortime.metrics.ErrorMetrics;
 import com.mrecoder.errortime.tracing.TraceIdProvider;
 import org.slf4j.Logger;
@@ -10,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -27,10 +30,13 @@ public class OrderEventListener {
 
     private final TraceIdProvider traceIdProvider;
     private final ErrorMetrics errorMetrics;
+    private final DownstreamService downstreamService;
 
-    public OrderEventListener(TraceIdProvider traceIdProvider, ErrorMetrics errorMetrics) {
+    public OrderEventListener(TraceIdProvider traceIdProvider, ErrorMetrics errorMetrics,
+            DownstreamService downstreamService) {
         this.traceIdProvider = traceIdProvider;
         this.errorMetrics = errorMetrics;
+        this.downstreamService = downstreamService;
     }
 
     @RabbitListener(queues = RabbitTopologyConfig.QUEUE, containerFactory = "rabbitListenerContainerFactory")
@@ -52,7 +58,14 @@ public class OrderEventListener {
         if (event.orderId() == null || event.orderId().isBlank()) {
             throw new ValidationException("orderId is required", Map.of("payload", String.valueOf(event.payload())));
         }
-        // Real order processing would happen here; this is a scaffold for the error-handling paths.
+        List<String> resourceIds = event.resourceIds() == null ? List.of() : event.resourceIds();
+        if (!resourceIds.isEmpty()) {
+            List<ResourceResponse> resources = downstreamService.fetchResources(resourceIds);
+            log.info("orderId={} resolved {} downstream resource(s) concurrently traceId={}",
+                event.orderId(), resources.size(), traceIdProvider.currentTraceId());
+        }
+        // Further order processing (persistence, follow-up events) would happen here;
+        // this stays a scaffold for the error-handling paths.
     }
 
     private void recordFailure(OrderEvent event, AppException ex) {

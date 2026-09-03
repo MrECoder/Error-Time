@@ -1,11 +1,15 @@
 package com.mrecoder.errortime.amqp;
 
 import com.mrecoder.errortime.exception.ValidationException;
+import com.mrecoder.errortime.feign.DownstreamService;
+import com.mrecoder.errortime.feign.ResourceResponse;
 import com.mrecoder.errortime.metrics.ErrorMetrics;
 import com.mrecoder.errortime.tracing.TraceIdProvider;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.tracing.Tracer;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -22,11 +26,13 @@ class OrderEventListenerTest {
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final ErrorMetrics errorMetrics = new ErrorMetrics(meterRegistry);
     private final TraceIdProvider traceIdProvider = new TraceIdProvider(noopTracer());
-    private final OrderEventListener listener = new OrderEventListener(traceIdProvider, errorMetrics);
+    private final DownstreamService downstreamService = mock(DownstreamService.class);
+    private final OrderEventListener listener =
+        new OrderEventListener(traceIdProvider, errorMetrics, downstreamService);
 
     @Test
     void blankOrderIdIsRejectedAsValidationExceptionAndCounted() {
-        assertThatThrownBy(() -> listener.handle(new OrderEvent(" ", "payload")))
+        assertThatThrownBy(() -> listener.handle(new OrderEvent(" ", List.of(), "payload")))
             .isInstanceOf(ValidationException.class);
 
         assertThat(meterRegistry.get("downstream.errors")
@@ -39,7 +45,17 @@ class OrderEventListenerTest {
 
     @Test
     void validEventIsProcessedWithoutError() {
-        listener.handle(new OrderEvent("order-1", "payload"));
+        listener.handle(new OrderEvent("order-1", List.of(), "payload"));
+
+        assertThat(meterRegistry.find("downstream.errors").counter()).isNull();
+    }
+
+    @Test
+    void resourceIdsAreFetchedConcurrentlyViaDownstreamService() {
+        when(downstreamService.fetchResources(List.of("res-1", "res-2")))
+            .thenReturn(List.of(new ResourceResponse("res-1", "one"), new ResourceResponse("res-2", "two")));
+
+        listener.handle(new OrderEvent("order-1", List.of("res-1", "res-2"), "payload"));
 
         assertThat(meterRegistry.find("downstream.errors").counter()).isNull();
     }
