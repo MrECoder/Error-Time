@@ -18,26 +18,27 @@ public abstract class AppException extends RuntimeException {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    private final String errorCode;
+    private final ErrorCode errorCode;
     private final HttpStatus status;
     private final Map<String, Object> details;
 
-    protected AppException(String errorCode, HttpStatus status, String message) {
-        this(errorCode, status, message, Collections.emptyMap(), null);
+    protected AppException(ErrorCode errorCode, String message) {
+        this(errorCode, message, Collections.emptyMap(), null);
     }
 
-    protected AppException(String errorCode, HttpStatus status, String message, Map<String, Object> details) {
-        this(errorCode, status, message, details, null);
+    protected AppException(ErrorCode errorCode, String message, Map<String, Object> details) {
+        this(errorCode, message, details, null);
     }
 
-    protected AppException(String errorCode, HttpStatus status, String message, Map<String, Object> details, Throwable cause) {
+    protected AppException(ErrorCode errorCode, String message, Map<String, Object> details, Throwable cause) {
         super(message, cause);
         this.errorCode = errorCode;
-        this.status = status;
+        this.status = errorCode.defaultStatus()
+            .orElseThrow(() -> new IllegalArgumentException(errorCode + " has no HTTP status to throw as an AppException"));
         this.details = details == null ? Collections.emptyMap() : Map.copyOf(details);
     }
 
-    public String getErrorCode() {
+    public ErrorCode getErrorCode() {
         return errorCode;
     }
 

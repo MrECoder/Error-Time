@@ -1,6 +1,7 @@
 package com.mrecoder.errortime.feign;
 
 import com.mrecoder.errortime.exception.AppException;
+import com.mrecoder.errortime.exception.ErrorCode;
 import com.mrecoder.errortime.exception.InternalServiceException;
 import com.mrecoder.errortime.metrics.ErrorMetrics;
 import org.springframework.context.annotation.Lazy;
@@ -27,6 +28,7 @@ import java.util.concurrent.StructuredTaskScope.Subtask;
 public class DownstreamService {
 
     private static final int MAX_ATTEMPTS = 3;
+    private static final String SOURCE = "feign:" + DownstreamClient.CLIENT_NAME;
 
     private final DownstreamClient downstreamClient;
     private final ErrorMetrics errorMetrics;
@@ -49,9 +51,9 @@ public class DownstreamService {
 
     @Recover
     public ResourceResponse recover(InternalServiceException ex, String id) {
-        errorMetrics.recordDownstreamError("feign:downstream-service", "RETRY_EXHAUSTED");
+        errorMetrics.recordDownstreamError(SOURCE, ErrorCode.RETRY_EXHAUSTED);
         throw new InternalServiceException(
-            "downstream-service unavailable for resource '%s' after %d attempts".formatted(id, MAX_ATTEMPTS), ex);
+            "%s unavailable for resource '%s' after %d attempts".formatted(DownstreamClient.CLIENT_NAME, id, MAX_ATTEMPTS), ex);
     }
 
     /**

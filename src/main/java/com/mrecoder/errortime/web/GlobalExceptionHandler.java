@@ -1,6 +1,7 @@
 package com.mrecoder.errortime.web;
 
 import com.mrecoder.errortime.exception.AppException;
+import com.mrecoder.errortime.exception.ErrorCode;
 import com.mrecoder.errortime.metrics.ErrorMetrics;
 import com.mrecoder.errortime.tracing.TraceIdProvider;
 import jakarta.validation.ConstraintViolation;
@@ -32,6 +33,11 @@ public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     private static final URI VALIDATION_ERROR_TYPE = URI.create("https://errors.error-time.dev/validation-error");
 
+    private static final String PROPERTY_ERROR_CODE = "errorCode";
+    private static final String PROPERTY_TIMESTAMP = "timestamp";
+    private static final String PROPERTY_TRACE_ID = "traceId";
+    private static final String PROPERTY_ERRORS = "errors";
+
     private final TraceIdProvider traceIdProvider;
     private final ErrorMetrics errorMetrics;
 
@@ -57,11 +63,11 @@ public class GlobalExceptionHandler {
             .map(fe -> new FieldErrorDetail(fe.getField(), fe.getDefaultMessage(), fe.getRejectedValue()))
             .toList();
 
-        String errorCode = "VALIDATION_ERROR";
+        ErrorCode errorCode = ErrorCode.VALIDATION_ERROR;
         ProblemDetail problem = newProblemDetail(HttpStatus.BAD_REQUEST,
             "Validation failed for %d field(s)".formatted(fieldErrors.size()), errorCode, request);
         problem.setType(VALIDATION_ERROR_TYPE);
-        problem.setProperty("errors", fieldErrors);
+        problem.setProperty(PROPERTY_ERRORS, fieldErrors);
 
         errorMetrics.recordAppError(errorCode, HttpStatus.BAD_REQUEST.value());
         logError(HttpStatus.BAD_REQUEST, errorCode, problem.getDetail(), null);
@@ -75,11 +81,11 @@ public class GlobalExceptionHandler {
             .map(GlobalExceptionHandler::toFieldErrorDetail)
             .toList();
 
-        String errorCode = "CONSTRAINT_VIOLATION";
+        ErrorCode errorCode = ErrorCode.CONSTRAINT_VIOLATION;
         ProblemDetail problem = newProblemDetail(HttpStatus.BAD_REQUEST,
             "Validation failed for %d field(s)".formatted(fieldErrors.size()), errorCode, request);
         problem.setType(VALIDATION_ERROR_TYPE);
-        problem.setProperty("errors", fieldErrors);
+        problem.setProperty(PROPERTY_ERRORS, fieldErrors);
 
         errorMetrics.recordAppError(errorCode, HttpStatus.BAD_REQUEST.value());
         logError(HttpStatus.BAD_REQUEST, errorCode, problem.getDetail(), null);
@@ -89,7 +95,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleGenericException(Exception ex, WebRequest request) {
-        String errorCode = "INTERNAL_ERROR";
+        ErrorCode errorCode = ErrorCode.INTERNAL_ERROR;
         ProblemDetail problem = newProblemDetail(HttpStatus.INTERNAL_SERVER_ERROR,
             "An unexpected error occurred", errorCode, request);
 
@@ -99,16 +105,16 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
-    private ProblemDetail newProblemDetail(HttpStatus status, String detail, String errorCode, WebRequest request) {
+    private ProblemDetail newProblemDetail(HttpStatus status, String detail, ErrorCode errorCode, WebRequest request) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
-        problem.setProperty("errorCode", errorCode);
-        problem.setProperty("timestamp", Instant.now());
-        problem.setProperty("traceId", traceIdProvider.currentTraceId());
+        problem.setProperty(PROPERTY_ERROR_CODE, errorCode.name());
+        problem.setProperty(PROPERTY_TIMESTAMP, Instant.now());
+        problem.setProperty(PROPERTY_TRACE_ID, traceIdProvider.currentTraceId());
         problem.setInstance(URI.create(request.getDescription(false).replaceFirst("^uri=", "")));
         return problem;
     }
 
-    private void logError(HttpStatus status, String errorCode, String message, Throwable cause) {
+    private void logError(HttpStatus status, ErrorCode errorCode, String message, Throwable cause) {
         String traceId = traceIdProvider.currentTraceId();
         if (status.is5xxServerError()) {
             log.error("errorCode={} status={} traceId={} message={}", errorCode, status.value(), traceId, message, cause);

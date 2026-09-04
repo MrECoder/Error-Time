@@ -10,6 +10,7 @@ import feign.Response;
 import feign.codec.ErrorDecoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -27,6 +28,8 @@ import java.util.Map;
 public class FeignErrorDecoder implements ErrorDecoder {
 
     private static final Logger log = LoggerFactory.getLogger(FeignErrorDecoder.class);
+    private static final String SOURCE_PREFIX = "feign:";
+    private static final String DETAIL_STATUS = "status";
 
     private final TraceIdProvider traceIdProvider;
     private final ErrorMetrics errorMetrics;
@@ -42,18 +45,19 @@ public class FeignErrorDecoder implements ErrorDecoder {
         String body = readBody(response);
         String traceId = traceIdProvider.currentTraceId();
         int status = response.status();
+        HttpStatus resolvedStatus = HttpStatus.resolve(status);
 
-        AppException mapped = switch (status) {
-            case 400 -> new ValidationException(
+        AppException mapped = switch (resolvedStatus) {
+            case BAD_REQUEST -> new ValidationException(
                 "Downstream call %s rejected the request: %s".formatted(methodKey, body));
-            case 404 -> ResourceNotFoundException.of(methodKey, extractRequestSummary(response));
-            default -> new InternalServiceException(
+            case NOT_FOUND -> ResourceNotFoundException.of(methodKey, extractRequestSummary(response));
+            case null, default -> new InternalServiceException(
                 "Downstream call %s failed with status %d: %s".formatted(methodKey, status, body),
-                Map.of("status", status), null);
+                Map.of(DETAIL_STATUS, status), null);
         };
 
         log.error("Feign call failed method={} status={} traceId={} body={}", methodKey, status, traceId, body);
-        errorMetrics.recordDownstreamError("feign:" + methodKey, mapped.getErrorCode());
+        errorMetrics.recordDownstreamError(SOURCE_PREFIX + methodKey, mapped.getErrorCode());
 
         return mapped;
     }

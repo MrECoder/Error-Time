@@ -1,5 +1,6 @@
 package com.mrecoder.errortime.metrics;
 
+import com.mrecoder.errortime.exception.ErrorCode;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Component;
@@ -20,6 +21,10 @@ public class ErrorMetrics {
     private static final String APP_ERRORS = "app.errors";
     private static final String DOWNSTREAM_ERRORS = "downstream.errors";
 
+    private static final String TAG_ERROR_CODE = "errorCode";
+    private static final String TAG_STATUS = "status";
+    private static final String TAG_SOURCE = "source";
+
     private final MeterRegistry meterRegistry;
     private final ConcurrentMap<String, Counter> appErrorCounters = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Counter> downstreamErrorCounters = new ConcurrentHashMap<>();
@@ -28,22 +33,22 @@ public class ErrorMetrics {
         this.meterRegistry = meterRegistry;
     }
 
-    public void recordAppError(String errorCode, int statusCode) {
+    public void recordAppError(ErrorCode errorCode, int statusCode) {
         appErrorCounters
-            .computeIfAbsent(errorCode + '|' + statusCode, key -> Counter.builder(APP_ERRORS)
+            .computeIfAbsent(errorCode.name() + '|' + statusCode, key -> Counter.builder(APP_ERRORS)
                 .description("Errors surfaced to callers via the global exception handler")
-                .tag("errorCode", errorCode)
-                .tag("status", String.valueOf(statusCode))
+                .tag(TAG_ERROR_CODE, errorCode.name())
+                .tag(TAG_STATUS, String.valueOf(statusCode))
                 .register(meterRegistry))
             .increment();
     }
 
-    public void recordDownstreamError(String source, String errorCode) {
+    public void recordDownstreamError(String source, ErrorCode errorCode) {
         downstreamErrorCounters
-            .computeIfAbsent(source + '|' + errorCode, key -> Counter.builder(DOWNSTREAM_ERRORS)
+            .computeIfAbsent(source + '|' + errorCode.name(), key -> Counter.builder(DOWNSTREAM_ERRORS)
                 .description("Failures encountered calling downstream systems (Feign, AMQP)")
-                .tag("source", source)
-                .tag("errorCode", errorCode)
+                .tag(TAG_SOURCE, source)
+                .tag(TAG_ERROR_CODE, errorCode.name())
                 .register(meterRegistry))
             .increment();
     }
