@@ -31,6 +31,7 @@ class DemoControllerIntegrationTest {
 
     @Test
     void unknownWidgetReturnsProblemDetailFromLibraryAutoConfiguration() throws Exception {
+        
         mockMvc.perform(get("/demo/widgets/42"))
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"))

@@ -6,6 +6,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.mrecoder.errortime.example.demo.constant.SimulatedOutcome;
+import com.mrecoder.errortime.example.demo.record.DatabaseRecord;
+import com.mrecoder.errortime.example.demo.record.LdapUser;
+import com.mrecoder.errortime.example.demo.record.QueueMessage;
+import com.mrecoder.errortime.example.demo.record.WeatherForecast;
+import com.mrecoder.errortime.example.demo.service.DatabaseStorageService;
+import com.mrecoder.errortime.example.demo.service.LdapService;
+import com.mrecoder.errortime.example.demo.service.MessageQueueService;
+import com.mrecoder.errortime.example.demo.service.WeatherForecastService;
+
 /**
  * One endpoint per pretend remote dependency, each named after the service
  * it reaches. None of these methods catch anything - every exception the
@@ -28,9 +38,11 @@ public class RemoteServicesDemoController {
     private final LdapService ldapService;
     private final WeatherForecastService weatherForecastService;
 
-    public RemoteServicesDemoController(DatabaseStorageService databaseStorageService,
-            MessageQueueService messageQueueService, LdapService ldapService,
-            WeatherForecastService weatherForecastService) {
+    public RemoteServicesDemoController(
+        DatabaseStorageService databaseStorageService,
+        MessageQueueService messageQueueService, LdapService ldapService,
+        WeatherForecastService weatherForecastService) {
+
         this.databaseStorageService = databaseStorageService;
         this.messageQueueService = messageQueueService;
         this.ldapService = ldapService;
@@ -38,26 +50,34 @@ public class RemoteServicesDemoController {
     }
 
     @GetMapping("/database/records/{id}")
-    public DatabaseRecord getDatabaseRecord(@PathVariable String id,
-            @RequestParam(name = "simulate", defaultValue = "success") String simulate) {
+    public DatabaseRecord getDatabaseRecord(
+        @PathVariable String id,
+        @RequestParam(name = "simulate", defaultValue = "success") String simulate) {
+
         return databaseStorageService.fetchRecord(id, SimulatedOutcome.from(simulate));
     }
 
     @GetMapping("/message-queue/{queueName}/next-message")
-    public QueueMessage getNextQueueMessage(@PathVariable String queueName,
-            @RequestParam(name = "simulate", defaultValue = "success") String simulate) {
+    public QueueMessage getNextQueueMessage(
+        @PathVariable String queueName,
+        @RequestParam(name = "simulate", defaultValue = "success") String simulate) {
+
         return messageQueueService.receiveNextMessage(queueName, SimulatedOutcome.from(simulate));
     }
 
     @GetMapping("/ldap/users/{username}")
-    public LdapUser getLdapUser(@PathVariable String username,
-            @RequestParam(name = "simulate", defaultValue = "success") String simulate) {
+    public LdapUser getLdapUser(
+        @PathVariable String username,
+        @RequestParam(name = "simulate", defaultValue = "success") String simulate) {
+
         return ldapService.lookupUser(username, SimulatedOutcome.from(simulate));
     }
 
     @GetMapping("/weather/{cityCode}/forecast")
-    public WeatherForecast getWeatherForecast(@PathVariable String cityCode,
-            @RequestParam(name = "simulate", defaultValue = "success") String simulate) {
+    public WeatherForecast getWeatherForecast(
+        @PathVariable String cityCode,
+        @RequestParam(name = "simulate", defaultValue = "success") String simulate) {
+            
         return weatherForecastService.getForecast(cityCode, SimulatedOutcome.from(simulate));
     }
 }

@@ -1,4 +1,4 @@
-package com.mrecoder.errortime.example.demo;
+package com.mrecoder.errortime.example.demo.constant;
 
 import com.mrecoder.errortime.exception.ErrorCode;
 import org.springframework.http.HttpStatus;

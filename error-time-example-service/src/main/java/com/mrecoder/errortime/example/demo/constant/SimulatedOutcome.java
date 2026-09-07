@@ -1,4 +1,4 @@
-package com.mrecoder.errortime.example.demo;
+package com.mrecoder.errortime.example.demo.constant;
 
 import com.mrecoder.errortime.exception.ValidationException;
 
@@ -6,7 +6,7 @@ import java.util.Locale;
 
 /**
  * Selects which outcome a demo service pretends to have, driven by the
- * {@code simulate} query parameter on {@link RemoteServicesDemoController}'s
+ * {@code simulate} query parameter on {@link com.mrecoder.errortime.example.demo.RemoteServicesDemoController}'s
  * endpoints - lets a single endpoint per service demonstrate the whole range
  * of responses {@code GlobalExceptionHandler} maps: success, not-found
  * (404), invalid input (400), and a downstream outage (503).
