@@ -98,8 +98,17 @@ Metric names, tag keys, and `ProblemDetail` property names are **not** configura
 ```
 mvn clean verify          # builds + tests both modules
 mvn -pl error-time-spring-boot-starter dependency:tree   # sanity-check the library's transitive deps
-mvn -pl error-time-example-service spring-boot:run        # run the demo service locally
 ```
+
+To run the demo service locally, install the starter into your local repo first, then run the example module standalone:
+
+```
+mvn install                     # from the repo root — builds + installs both modules
+cd error-time-example-service
+mvn spring-boot:run
+```
+
+(A bare plugin goal like `spring-boot:run` runs against every project Maven pulls into the reactor — `mvn -pl error-time-example-service -am spring-boot:run` from the root fails on the parent aggregator POM, which has no main class. `mvn install` then running from inside the module avoids that entirely.)
 
 The example service starts and serves HTTP even without RabbitMQ or an OTLP collector running. For full end-to-end behavior:
 
