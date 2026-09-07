@@ -43,3 +43,10 @@ logging:
     level: "%5p [${spring.application.name},%X{traceId:-},%X{spanId:-}]"
   level:
     com.mrecoder.errortime: INFO
+  file:
+    name: logs/${spring.application.name}.log
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 7
+      total-size-cap: 100MB

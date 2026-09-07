@@ -8,8 +8,7 @@ import com.mrecoder.errortime.metrics.ErrorMetrics;
 import com.mrecoder.errortime.tracing.TraceIdProvider;
 import feign.Response;
 import feign.codec.ErrorDecoder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 
 import java.io.IOException;
@@ -28,9 +27,9 @@ import java.util.Map;
  * 401/403/409/429 from downstream is never retried by a caller like
  * {@code DownstreamService}'s {@code @Retryable}.
  */
+@Slf4j
 public class FeignErrorDecoder implements ErrorDecoder {
 
-    private static final Logger log = LoggerFactory.getLogger(FeignErrorDecoder.class);
     private static final String SOURCE_PREFIX = "feign:";
     private static final String DETAIL_STATUS = "status";
 

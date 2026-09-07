@@ -7,8 +7,7 @@ import com.mrecoder.errortime.metrics.ErrorMetrics;
 import com.mrecoder.errortime.tracing.TraceIdProvider;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -31,10 +30,9 @@ import java.util.List;
  * {@code AppException} for the domain hierarchy and {@code ErrorMetrics} for
  * the counters incremented here.
  */
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler implements Ordered {
-
-    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     private static final String PROPERTY_ERROR_CODE = "errorCode";
     private static final String PROPERTY_TIMESTAMP = "timestamp";

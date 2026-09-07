@@ -7,8 +7,7 @@ import com.mrecoder.errortime.exception.InternalServiceException;
 import com.mrecoder.errortime.exception.ValidationException;
 import com.mrecoder.errortime.metrics.ErrorMetrics;
 import com.mrecoder.errortime.tracing.TraceIdProvider;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
@@ -22,10 +21,10 @@ import java.util.Map;
  * always as an {@link AppException} subtype, always logged with the current
  * traceId, always counted - so that policy has something reliable to classify.
  */
+@Slf4j
 @Component
 public class OrderEventListener {
 
-    private static final Logger log = LoggerFactory.getLogger(OrderEventListener.class);
     private static final String SOURCE = "amqp:" + RabbitTopologyConfig.QUEUE;
 
     private final TraceIdProvider traceIdProvider;

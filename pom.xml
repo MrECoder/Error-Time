@@ -63,6 +63,14 @@
                  to a bean name) silently breaks since javac drops formal
                  parameter names unless told to keep them. -->
             <parameters>true</parameters>
+            <!-- On this javac, annotation processors are only discovered from
+                 -processorpath, never from the plain compile classpath - without
+                 an explicit annotationProcessorPaths list, @Slf4j (and any other
+                 Lombok annotation) compiles with no error but silently generates
+                 nothing. Let entries below resolve their version from
+                 dependencyManagement (spring-boot-dependencies) instead of
+                 duplicating it here. -->
+            <annotationProcessorPathsUseDepMgmt>true</annotationProcessorPathsUseDepMgmt>
           </configuration>
         </plugin>
         <plugin>
