@@ -115,6 +115,24 @@ logging:
     level: "%5p [${spring.application.name},%X{traceId:-},%X{spanId:-}]"
 ```
 
+### Demo endpoints
+
+`RemoteServicesDemoController` exposes one endpoint per pretend remote dependency, none of which do any exception handling themselves — every failure propagates to the library's auto-configured `GlobalExceptionHandler`, the same way it would for a real consumer. Each takes an optional `?simulate=` query parameter: `success` (default), `not-found`, `invalid`, or `unavailable`.
+
+| Endpoint | Pretend dependency |
+|---|---|
+| `GET /demo/services/database/records/{id}` | a database lookup |
+| `GET /demo/services/message-queue/{queueName}/next-message` | a message-queue consume |
+| `GET /demo/services/ldap/users/{username}` | an LDAP directory bind |
+| `GET /demo/services/weather/{cityCode}/forecast` | a third-party weather API call |
+
+```
+curl http://localhost:8080/demo/services/weather/LHR/forecast
+curl http://localhost:8080/demo/services/weather/LHR/forecast?simulate=unavailable
+```
+
+The `unavailable` case (`DemoErrorCode`/`RemoteServiceUnavailableException`, 503) is this application's own error code — declared by implementing the library's `ErrorCode` interface, not something the library needed to know about in advance.
+
 ## Testing
 
 `mvn clean verify` runs the full suite for both modules with no external infrastructure: unit tests for each library class, an `ApplicationContextRunner`-based suite verifying the auto-configuration itself (`ErrorTimeAutoConfigurationTests` — the standard way a Spring Boot starter is tested: no `Tracer`/`MeterRegistry` present, Feign absent from the classpath, consumer overrides, property toggles), and an end-to-end `@SpringBootTest` in the example module proving the library activates with zero component scanning from a consumer-shaped application.
