@@ -21,6 +21,7 @@
     <maven.compiler.release>21</maven.compiler.release>
     <spring-boot.version>4.1.1</spring-boot.version>
     <spring-cloud.version>2025.1.3</spring-cloud.version>
+    <resilience4j.version>2.3.0</resilience4j.version>
 
     <!-- Placeholders - set the real Nexus URLs before the first `mvn deploy`,
          either here or with -Dnexus.releases.url=... -Dnexus.snapshots.url=...

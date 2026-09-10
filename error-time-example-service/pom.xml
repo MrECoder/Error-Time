@@ -55,6 +55,15 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-amqp</artifactId>
     </dependency>
+    <!-- Powers the circuit-breaker demo endpoint (@CircuitBreaker on
+         CircuitBreakerDemoService); also puts CallNotPermittedException on
+         the classpath, activating the starter's
+         ErrorTimeResilienceAutoConfiguration automatically. -->
+    <dependency>
+      <groupId>io.github.resilience4j</groupId>
+      <artifactId>resilience4j-spring-boot3</artifactId>
+      <version>${resilience4j.version}</version>
+    </dependency>
     <dependency>
       <groupId>org.projectlombok</groupId>
       <artifactId>lombok</artifactId>

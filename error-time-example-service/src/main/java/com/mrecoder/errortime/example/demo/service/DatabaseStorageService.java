@@ -3,6 +3,8 @@ package com.mrecoder.errortime.example.demo.service;
 import com.mrecoder.errortime.example.demo.RemoteServiceUnavailableException;
 import com.mrecoder.errortime.example.demo.constant.SimulatedOutcome;
 import com.mrecoder.errortime.example.demo.record.DatabaseRecord;
+import com.mrecoder.errortime.exception.ConflictException;
+import com.mrecoder.errortime.exception.PreconditionFailedException;
 import com.mrecoder.errortime.exception.ResourceNotFoundException;
 import com.mrecoder.errortime.exception.ValidationException;
 import org.springframework.stereotype.Service;
@@ -10,7 +12,9 @@ import org.springframework.stereotype.Service;
 /**
  * Stands in for a real database client - no actual storage, just enough
  * branching on {@link SimulatedOutcome} to exercise every path through
- * {@code GlobalExceptionHandler}.
+ * {@code GlobalExceptionHandler}, including the two outcomes a database
+ * write is naturally prone to: a concurrent modification ({@code conflict})
+ * and a failed optimistic-lock check ({@code precondition-failed}).
  */
 @Service
 public class DatabaseStorageService {
@@ -22,6 +26,12 @@ public class DatabaseStorageService {
             case NOT_FOUND -> throw ResourceNotFoundException.of("database record", id);
             case INVALID -> throw new ValidationException("Record id '%s' is not a syntactically valid key".formatted(id));
             case UNAVAILABLE -> throw RemoteServiceUnavailableException.of("database storage service");
+            case CONFLICT -> throw new ConflictException(
+                "Record '%s' was modified concurrently by another writer".formatted(id));
+            case PRECONDITION_FAILED -> throw new PreconditionFailedException(
+                "Record '%s' has changed since it was last read (If-Match precondition failed)".formatted(id));
+            case UNAUTHENTICATED, UNAUTHORIZED, RATE_LIMITED, DOWNSTREAM_TIMEOUT ->
+                throw outcome.unsupportedFor("the database record lookup");
         };
     }
 }

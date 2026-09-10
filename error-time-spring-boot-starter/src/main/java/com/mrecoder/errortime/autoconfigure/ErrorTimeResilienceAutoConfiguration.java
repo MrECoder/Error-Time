@@ -42,6 +42,6 @@ public class ErrorTimeResilienceAutoConfiguration {
     @ConditionalOnMissingBean
     CircuitBreakerExceptionHandler errorTimeCircuitBreakerExceptionHandler(
             ErrorMetrics errorMetrics, ProblemDetailFactory problemDetailFactory, ErrorTimeProperties properties) {
-        return new CircuitBreakerExceptionHandler(errorMetrics, problemDetailFactory, properties.getWeb().getOrder());
+        return new CircuitBreakerExceptionHandler(errorMetrics, problemDetailFactory, properties.getResilience().getOrder());
     }
 }

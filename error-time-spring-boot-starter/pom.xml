@@ -14,10 +14,6 @@
   <name>Error-Time Spring Boot Starter</name>
   <description>Auto-configured error handling, error-code taxonomy, metrics and trace propagation for Spring Boot microservices</description>
 
-  <properties>
-    <resilience4j.version>2.3.0</resilience4j.version>
-  </properties>
-
   <dependencies>
     <dependency>
       <groupId>org.springframework.boot</groupId>

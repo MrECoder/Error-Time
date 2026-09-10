@@ -230,12 +230,33 @@ public class ErrorTimeProperties {
         /** Whether Resilience4j's {@code CallNotPermittedException} is mapped to a 503 ProblemDetail. */
         private boolean enabled = true;
 
+        /**
+         * {@link org.springframework.core.annotation.Order} of this advice. Spring's
+         * exception resolver picks the first applicable {@code @ControllerAdvice}
+         * bean in order that has *any* matching handler - it does not compare
+         * specificity across different advice beans - so this defaults to
+         * {@code HIGHEST_PRECEDENCE}, well ahead of {@code errortime.web.order}'s
+         * default {@code LOWEST_PRECEDENCE}: otherwise GlobalExceptionHandler's
+         * catch-all {@code Exception.class} handler claims a
+         * {@code CallNotPermittedException} before this more specific one ever
+         * sees it.
+         */
+        private int order = Ordered.HIGHEST_PRECEDENCE;
+
         public boolean isEnabled() {
             return enabled;
         }
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+
+        public int getOrder() {
+            return order;
+        }
+
+        public void setOrder(int order) {
+            this.order = order;
         }
     }
 }

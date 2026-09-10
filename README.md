@@ -121,6 +121,7 @@ Treat these property names, and the `app.errors`/`downstream.errors` metric name
 | `errortime.feign.log-response-body` | `false` | logs the downstream response body internally when a Feign call fails — off by default (PII/log-volume risk across a fleet). The body is *never* included in the caller-facing response regardless of this flag. |
 | `errortime.feign.max-logged-body-chars` | `2048` | |
 | `errortime.resilience.enabled` | `true` | maps Resilience4j's `CallNotPermittedException` (circuit open) to a 503 `ProblemDetail`, when resilience4j-circuitbreaker is on the classpath |
+| `errortime.resilience.order` | `Ordered.HIGHEST_PRECEDENCE` | must stay ahead of `errortime.web.order` - Spring's exception resolver picks the first `@ControllerAdvice` bean (by order) with *any* matching handler, not the most specific one across beans, so this needs to be checked before `GlobalExceptionHandler`'s catch-all |
 
 Metric names, tag keys, and `ProblemDetail` property names are **not** configurable — see the response contract above.
 
@@ -186,21 +187,37 @@ logging:
 
 ### Demo endpoints
 
-`RemoteServicesDemoController` exposes one endpoint per pretend remote dependency, none of which do any exception handling themselves — every failure propagates to the library's auto-configured `GlobalExceptionHandler`, the same way it would for a real consumer. Each takes an optional `?simulate=` query parameter: `success` (default), `not-found`, `invalid`, or `unavailable`.
+`RemoteServicesDemoController` exposes one endpoint per pretend remote dependency, none of which do any exception handling themselves — every failure propagates to the library's auto-configured `GlobalExceptionHandler`, the same way it would for a real consumer. `success` (default), `not-found`, `invalid`, and `unavailable` work on every endpoint below; the rest are business-appropriate to only some of them, matching what a real version of that dependency would actually fail with.
 
-| Endpoint | Pretend dependency |
-|---|---|
-| `GET /demo/services/database/records/{id}` | a database lookup |
-| `GET /demo/services/message-queue/{queueName}/next-message` | a message-queue consume |
-| `GET /demo/services/ldap/users/{username}` | an LDAP directory bind |
-| `GET /demo/services/weather/{cityCode}/forecast` | a third-party weather API call |
+| Endpoint | Pretend dependency | Extra `?simulate=` values |
+|---|---|---|
+| `GET /demo/services/database/records/{id}` | a database lookup | `conflict`, `precondition-failed` |
+| `GET /demo/services/message-queue/{queueName}/next-message` | a message-queue consume | `rate-limited` |
+| `GET /demo/services/ldap/users/{username}` | an LDAP directory bind | `unauthenticated`, `unauthorized` |
+| `GET /demo/services/weather/{cityCode}/forecast` | a third-party weather API call | `downstream-timeout` |
 
 ```
 curl http://localhost:8080/demo/services/weather/LHR/forecast
 curl http://localhost:8080/demo/services/weather/LHR/forecast?simulate=unavailable
+curl http://localhost:8080/demo/services/ldap/users/jdoe?simulate=unauthenticated
+curl -i http://localhost:8080/demo/services/message-queue/orders/next-message?simulate=rate-limited   # -i to see Retry-After
 ```
 
-The `unavailable` case (`DemoErrorCode`/`RemoteServiceUnavailableException`, 503) is this application's own error code — declared by implementing the library's `ErrorCode` interface, not something the library needed to know about in advance.
+The `unavailable` case (`DemoErrorCode`/`RemoteServiceUnavailableException`, 503) is this application's own error code — declared by implementing the library's `ErrorCode` interface, not something the library needed to know about in advance. Every other outcome above uses one of the library's own built-in exception types.
+
+#### Circuit breaker demo
+
+`GET /demo/services/circuit-breaker/status?simulate=success|unavailable` is different from the rest: it's backed by `CircuitBreakerDemoService#checkStatus`, decorated with Resilience4j's `@CircuitBreaker`. `application.yml` configures a deliberately tiny window (`resilience4j.circuitbreaker.instances.circuit-breaker-demo`: 4-call sliding window, 50% failure threshold) so you can trip it by hand:
+
+```
+curl http://localhost:8080/demo/services/circuit-breaker/status                        # 200 - closed
+curl http://localhost:8080/demo/services/circuit-breaker/status?simulate=unavailable   # 503 - real failure, recorded
+curl http://localhost:8080/demo/services/circuit-breaker/status?simulate=unavailable   # 503 - real failure, recorded
+curl http://localhost:8080/demo/services/circuit-breaker/status                        # 200 - 4th call in the window; breaker evaluates *after* this one
+curl http://localhost:8080/demo/services/circuit-breaker/status                        # 503 - breaker is now OPEN; rejected before the method even runs
+```
+
+That last response comes from `CircuitBreakerExceptionHandler`, not `CircuitBreakerDemoService` - Resilience4j throws `CallNotPermittedException` straight from its proxy once the breaker is open, and the starter maps it to the same `ProblemDetail` shape as everything else.
 
 ## Testing
 
