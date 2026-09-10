@@ -4,10 +4,12 @@ import com.mrecoder.errortime.exception.CommonErrorCode;
 import com.mrecoder.errortime.feign.FeignErrorDecoder;
 import com.mrecoder.errortime.feign.TraceIdPropagationInterceptor;
 import com.mrecoder.errortime.metrics.ErrorMetrics;
+import com.mrecoder.errortime.resilience.CircuitBreakerExceptionHandler;
 import com.mrecoder.errortime.tracing.TraceIdProvider;
 import com.mrecoder.errortime.web.GlobalExceptionHandler;
 import feign.RequestInterceptor;
 import feign.codec.ErrorDecoder;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.tracing.Tracer;
@@ -35,7 +37,8 @@ class ErrorTimeAutoConfigurationTests {
         ErrorTimeTracingAutoConfiguration.class,
         ErrorTimeMetricsAutoConfiguration.class,
         ErrorTimeWebAutoConfiguration.class,
-        ErrorTimeFeignAutoConfiguration.class
+        ErrorTimeFeignAutoConfiguration.class,
+        ErrorTimeResilienceAutoConfiguration.class
     };
 
     private final WebApplicationContextRunner webContextRunner = new WebApplicationContextRunner()
@@ -45,7 +48,7 @@ class ErrorTimeAutoConfigurationTests {
         .withConfiguration(AutoConfigurations.of(AUTOCONFIGS));
 
     @Test
-    void webContextWithDefaultsRegistersAllFourBeans() {
+    void webContextWithDefaultsRegistersAllExpectedBeans() {
         webContextRunner.withUserConfiguration(MeterRegistryConfig.class, TracerConfig.class)
             .run(context -> {
                 assertThat(context).hasNotFailed();
@@ -54,6 +57,26 @@ class ErrorTimeAutoConfigurationTests {
                 assertThat(context).hasSingleBean(GlobalExceptionHandler.class);
                 assertThat(context).hasSingleBean(FeignErrorDecoder.class);
                 assertThat(context).hasSingleBean(TraceIdPropagationInterceptor.class);
+                assertThat(context).hasSingleBean(CircuitBreakerExceptionHandler.class);
+            });
+    }
+
+    @Test
+    void withoutResilience4jOnClasspathNoCircuitBreakerBeanButContextStillStarts() {
+        webContextRunner.withClassLoader(new FilteredClassLoader(CallNotPermittedException.class))
+            .run(context -> {
+                assertThat(context).hasNotFailed();
+                assertThat(context).doesNotHaveBean(CircuitBreakerExceptionHandler.class);
+                assertThat(context).hasSingleBean(GlobalExceptionHandler.class);
+            });
+    }
+
+    @Test
+    void resilienceEnabledFalseDisablesCircuitBreakerExceptionHandler() {
+        webContextRunner.withPropertyValues("errortime.resilience.enabled=false")
+            .run(context -> {
+                assertThat(context).hasNotFailed();
+                assertThat(context).doesNotHaveBean(CircuitBreakerExceptionHandler.class);
             });
     }
 

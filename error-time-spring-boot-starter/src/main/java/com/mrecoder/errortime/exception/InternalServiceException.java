@@ -22,6 +22,10 @@ public class InternalServiceException extends AppException {
         super(CommonErrorCode.INTERNAL_SERVICE_ERROR, message, Map.of(), cause);
     }
 
+    public InternalServiceException(String message, Map<String, Object> details) {
+        super(CommonErrorCode.INTERNAL_SERVICE_ERROR, message, details);
+    }
+
     public InternalServiceException(String message, Map<String, Object> details, Throwable cause) {
         super(CommonErrorCode.INTERNAL_SERVICE_ERROR, message, details, cause);
     }

@@ -2,3 +2,4 @@ com.mrecoder.errortime.autoconfigure.ErrorTimeTracingAutoConfiguration
 com.mrecoder.errortime.autoconfigure.ErrorTimeMetricsAutoConfiguration
 com.mrecoder.errortime.autoconfigure.ErrorTimeWebAutoConfiguration
 com.mrecoder.errortime.autoconfigure.ErrorTimeFeignAutoConfiguration
+com.mrecoder.errortime.autoconfigure.ErrorTimeResilienceAutoConfiguration

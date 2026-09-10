@@ -89,6 +89,21 @@
       <artifactId>reactor-test</artifactId>
       <scope>test</scope>
     </dependency>
+
+    <!-- End-to-end coverage of the AMQP retry-vs-DLQ routing (RabbitRetryConfig)
+         against a real broker - needs Docker, so these tests are tagged
+         "testcontainers" (see the surefire exclusion below) and run in CI,
+         not as part of every local `mvn test`. -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-rabbitmq</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>

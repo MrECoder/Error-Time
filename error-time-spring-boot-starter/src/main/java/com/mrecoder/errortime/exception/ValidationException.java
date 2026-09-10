@@ -18,7 +18,15 @@ public class ValidationException extends AppException {
         super(CommonErrorCode.VALIDATION_ERROR, message);
     }
 
+    public ValidationException(String message, Throwable cause) {
+        super(CommonErrorCode.VALIDATION_ERROR, message, Map.of(), cause);
+    }
+
     public ValidationException(String message, Map<String, Object> fieldErrors) {
         super(CommonErrorCode.VALIDATION_ERROR, message, fieldErrors);
+    }
+
+    public ValidationException(String message, Map<String, Object> fieldErrors, Throwable cause) {
+        super(CommonErrorCode.VALIDATION_ERROR, message, fieldErrors, cause);
     }
 }

@@ -3,7 +3,8 @@ package com.mrecoder.errortime.metrics;
 import com.mrecoder.errortime.exception.ErrorCode;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import org.springframework.lang.Nullable;
+import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -20,6 +21,7 @@ import java.util.concurrent.ConcurrentMap;
  * (recording becomes a no-op) rather than losing {@code GlobalExceptionHandler}
  * and {@code FeignErrorDecoder}, which both depend on this class.
  */
+@Slf4j
 public class ErrorMetrics {
 
     private static final String APP_ERRORS = "app.errors";
@@ -35,12 +37,20 @@ public class ErrorMetrics {
 
     public ErrorMetrics(@Nullable MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
+        if (meterRegistry == null) {
+            log.warn("No MeterRegistry bean found - app.errors/downstream.errors will not be recorded. "
+                + "Add a Micrometer registry (e.g. spring-boot-starter-actuator + micrometer-registry-prometheus) to enable them.");
+        } else {
+            log.info("Error-Time metrics enabled: recording app.errors/downstream.errors via {}",
+                meterRegistry.getClass().getSimpleName());
+        }
     }
 
     public void recordAppError(ErrorCode errorCode, int statusCode) {
         if (meterRegistry == null) {
             return;
         }
+        log.debug("Recording app.errors errorCode={} status={}", errorCode.name(), statusCode);
         appErrorCounters
             .computeIfAbsent(errorCode.name() + '|' + statusCode, key -> Counter.builder(APP_ERRORS)
                 .description("Errors surfaced to callers via the global exception handler")
@@ -54,6 +64,7 @@ public class ErrorMetrics {
         if (meterRegistry == null) {
             return;
         }
+        log.debug("Recording downstream.errors source={} errorCode={}", source, errorCode.name());
         downstreamErrorCounters
             .computeIfAbsent(source + '|' + errorCode.name(), key -> Counter.builder(DOWNSTREAM_ERRORS)
                 .description("Failures encountered calling downstream systems (Feign, AMQP)")

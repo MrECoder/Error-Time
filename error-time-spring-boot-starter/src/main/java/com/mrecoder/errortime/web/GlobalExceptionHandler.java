@@ -3,15 +3,20 @@ package com.mrecoder.errortime.web;
 import com.mrecoder.errortime.exception.AppException;
 import com.mrecoder.errortime.exception.CommonErrorCode;
 import com.mrecoder.errortime.exception.ErrorCode;
+import com.mrecoder.errortime.exception.RateLimitExceededException;
 import com.mrecoder.errortime.metrics.ErrorMetrics;
+import com.mrecoder.errortime.support.LogSanitizer;
+import com.mrecoder.errortime.support.SensitiveDataRedactor;
 import com.mrecoder.errortime.tracing.TraceIdProvider;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.Ordered;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -29,19 +34,24 @@ import java.util.List;
  * ends up logged once, counted once, and shaped the same way. See
  * {@code AppException} for the domain hierarchy and {@code ErrorMetrics} for
  * the counters incremented here.
+ *
+ * <p>Every distinct {@link ErrorCode} gets its own {@code type} URI (see
+ * {@link ProblemDetailFactory}), sensitive field/detail names are redacted
+ * regardless of what a caller supplied (see {@link SensitiveDataRedactor}),
+ * and every string that traces back to caller input is stripped of
+ * CR/LF before it reaches a log line (see {@link LogSanitizer}) so a crafted
+ * request can't forge extra log entries.
  */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler implements Ordered {
 
-    private static final String PROPERTY_ERROR_CODE = "errorCode";
-    private static final String PROPERTY_TIMESTAMP = "timestamp";
-    private static final String PROPERTY_TRACE_ID = "traceId";
     private static final String PROPERTY_ERRORS = "errors";
 
     private final TraceIdProvider traceIdProvider;
     private final ErrorMetrics errorMetrics;
-    private final URI validationErrorType;
+    private final ProblemDetailFactory problemDetailFactory;
+    private final SensitiveDataRedactor redactor;
     private final boolean includeRejectedValue;
     private final int order;
 
@@ -51,13 +61,29 @@ public class GlobalExceptionHandler implements Ordered {
 
     public GlobalExceptionHandler(TraceIdProvider traceIdProvider, ErrorMetrics errorMetrics,
             URI problemTypeBaseUri, boolean includeRejectedValue, int order) {
+        this(traceIdProvider, errorMetrics, problemTypeBaseUri, includeRejectedValue, order,
+            false, 10, new SensitiveDataRedactor(true, List.of()));
+    }
+
+    public GlobalExceptionHandler(TraceIdProvider traceIdProvider, ErrorMetrics errorMetrics,
+            URI problemTypeBaseUri, boolean includeRejectedValue, int order,
+            boolean includeStackTrace, int stackTraceMaxFrames, SensitiveDataRedactor redactor) {
+        this(traceIdProvider, errorMetrics,
+            new ProblemDetailFactory(traceIdProvider, problemTypeBaseUri, includeStackTrace, stackTraceMaxFrames),
+            includeRejectedValue, order, redactor);
+    }
+
+    /** Used by the auto-configuration, which shares one {@link ProblemDetailFactory} bean across this and {@code CircuitBreakerExceptionHandler}. */
+    public GlobalExceptionHandler(TraceIdProvider traceIdProvider, ErrorMetrics errorMetrics,
+            ProblemDetailFactory problemDetailFactory, boolean includeRejectedValue, int order,
+            SensitiveDataRedactor redactor) {
         this.traceIdProvider = traceIdProvider;
         this.errorMetrics = errorMetrics;
-        this.validationErrorType = "about:blank".equals(problemTypeBaseUri.toString())
-            ? problemTypeBaseUri
-            : URI.create(problemTypeBaseUri.toString() + "/validation-error");
+        this.problemDetailFactory = problemDetailFactory;
         this.includeRejectedValue = includeRejectedValue;
         this.order = order;
+        this.redactor = redactor;
+        log.info("Error-Time web error handling activated (order={}, includeRejectedValue={})", order, includeRejectedValue);
     }
 
     @Override
@@ -65,27 +91,37 @@ public class GlobalExceptionHandler implements Ordered {
         return order;
     }
 
+    /**
+     * More specific than {@link #handleAppException}, so Spring routes every
+     * {@link RateLimitExceededException} here instead - the only
+     * {@code AppException} subtype whose response needs a header alongside
+     * the body (the standard {@code Retry-After}, RFC 9110 §10.2.3).
+     */
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ProblemDetail> handleRateLimitExceeded(RateLimitExceededException ex, WebRequest request) {
+        logHandling(ex, request);
+        ProblemDetail problem = buildAndRecord(ex, request);
+        HttpHeaders headers = new HttpHeaders();
+        ex.getRetryAfterSeconds().ifPresent(seconds -> headers.set(HttpHeaders.RETRY_AFTER, String.valueOf(seconds)));
+        return ResponseEntity.status(ex.getStatus()).headers(headers).body(problem);
+    }
+
     @ExceptionHandler(AppException.class)
     public ProblemDetail handleAppException(AppException ex, WebRequest request) {
-        ProblemDetail problem = newProblemDetail(ex.getStatus(), ex.getMessage(), ex.getErrorCode(), request);
-        ex.getDetails().forEach(problem::setProperty);
-
-        errorMetrics.recordAppError(ex.getErrorCode(), ex.getStatus().value());
-        logError(ex.getStatus(), ex.getErrorCode(), ex.getMessage(), ex);
-
-        return problem;
+        logHandling(ex, request);
+        return buildAndRecord(ex, request);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleMethodArgumentNotValid(MethodArgumentNotValidException ex, WebRequest request) {
+        logHandling(ex, request);
         List<FieldErrorDetail> fieldErrors = ex.getBindingResult().getFieldErrors().stream()
             .map(fe -> toFieldErrorDetail(fe.getField(), fe.getDefaultMessage(), fe.getRejectedValue()))
             .toList();
 
         ErrorCode errorCode = CommonErrorCode.VALIDATION_ERROR;
-        ProblemDetail problem = newProblemDetail(HttpStatus.BAD_REQUEST,
-            "Validation failed for %d field(s)".formatted(fieldErrors.size()), errorCode, request);
-        problem.setType(validationErrorType);
+        ProblemDetail problem = problemDetailFactory.create(HttpStatus.BAD_REQUEST,
+            "Validation failed for %d field(s)".formatted(fieldErrors.size()), errorCode, request, ex);
         problem.setProperty(PROPERTY_ERRORS, fieldErrors);
 
         errorMetrics.recordAppError(errorCode, HttpStatus.BAD_REQUEST.value());
@@ -96,14 +132,14 @@ public class GlobalExceptionHandler implements Ordered {
 
     @ExceptionHandler(ConstraintViolationException.class)
     public ProblemDetail handleConstraintViolation(ConstraintViolationException ex, WebRequest request) {
+        logHandling(ex, request);
         List<FieldErrorDetail> fieldErrors = ex.getConstraintViolations().stream()
             .map(this::toFieldErrorDetail)
             .toList();
 
         ErrorCode errorCode = CommonErrorCode.CONSTRAINT_VIOLATION;
-        ProblemDetail problem = newProblemDetail(HttpStatus.BAD_REQUEST,
-            "Validation failed for %d field(s)".formatted(fieldErrors.size()), errorCode, request);
-        problem.setType(validationErrorType);
+        ProblemDetail problem = problemDetailFactory.create(HttpStatus.BAD_REQUEST,
+            "Validation failed for %d field(s)".formatted(fieldErrors.size()), errorCode, request, ex);
         problem.setProperty(PROPERTY_ERRORS, fieldErrors);
 
         errorMetrics.recordAppError(errorCode, HttpStatus.BAD_REQUEST.value());
@@ -117,10 +153,11 @@ public class GlobalExceptionHandler implements Ordered {
         if (ex instanceof ErrorResponse errorResponse) {
             return passThroughErrorResponse(ex, errorResponse);
         }
+        logHandling(ex, request);
 
         ErrorCode errorCode = CommonErrorCode.INTERNAL_ERROR;
-        ProblemDetail problem = newProblemDetail(HttpStatus.INTERNAL_SERVER_ERROR,
-            "An unexpected error occurred", errorCode, request);
+        ProblemDetail problem = problemDetailFactory.create(HttpStatus.INTERNAL_SERVER_ERROR,
+            "An unexpected error occurred", errorCode, request, ex);
 
         errorMetrics.recordAppError(errorCode, HttpStatus.INTERNAL_SERVER_ERROR.value());
         logError(HttpStatus.INTERNAL_SERVER_ERROR, errorCode, ex.getMessage(), ex);
@@ -142,51 +179,48 @@ public class GlobalExceptionHandler implements Ordered {
      */
     private ProblemDetail passThroughErrorResponse(Exception ex, ErrorResponse errorResponse) {
         ProblemDetail problem = errorResponse.getBody();
-        problem.setProperty(PROPERTY_TIMESTAMP, Instant.now());
+        problem.setProperty(ProblemDetailFactory.PROPERTY_TIMESTAMP, Instant.now());
         String traceId = traceIdProvider.currentTraceId();
-        problem.setProperty(PROPERTY_TRACE_ID, traceId);
+        problem.setProperty(ProblemDetailFactory.PROPERTY_TRACE_ID, traceId);
 
         HttpStatusCode statusCode = errorResponse.getStatusCode();
+        String detail = LogSanitizer.sanitize(problem.getDetail());
+        var event = statusCode.is5xxServerError() ? log.atError() : log.atWarn();
+        event.addKeyValue("status", statusCode.value())
+            .addKeyValue("traceId", traceId);
         if (statusCode.is5xxServerError()) {
-            log.error("status={} traceId={} message={}", statusCode.value(), traceId, problem.getDetail(), ex);
-        } else {
-            log.warn("status={} traceId={} message={}", statusCode.value(), traceId, problem.getDetail());
+            event.setCause(ex);
         }
+        event.log("Pass-through error response: status={} traceId={} message={}", statusCode.value(), traceId, detail);
         return problem;
     }
 
-    private ProblemDetail newProblemDetail(HttpStatus status, String detail, ErrorCode errorCode, WebRequest request) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
-        problem.setProperty(PROPERTY_ERROR_CODE, errorCode.name());
-        problem.setProperty(PROPERTY_TIMESTAMP, Instant.now());
-        problem.setProperty(PROPERTY_TRACE_ID, traceIdProvider.currentTraceId());
-        setInstanceIfValid(problem, request);
+    private ProblemDetail buildAndRecord(AppException ex, WebRequest request) {
+        ProblemDetail problem = problemDetailFactory.create(ex.getStatus(), ex.getMessage(), ex.getErrorCode(), request, ex);
+        ex.getDetails().forEach((key, value) -> problem.setProperty(key, redactor.redactIfSensitive(key, value)));
+
+        errorMetrics.recordAppError(ex.getErrorCode(), ex.getStatus().value());
+        logError(ex.getStatus(), ex.getErrorCode(), ex.getMessage(), ex);
+
         return problem;
     }
 
-    /**
-     * {@code request.getDescription(false)}'s "uri=" prefix strip can leave an
-     * unencoded illegal URI character (a raw space, {@code {}, |, ^}, ...) from
-     * the original request path, which makes {@link URI#create} throw
-     * {@code IllegalArgumentException} - inside the exception handler itself.
-     * Omit {@code instance} rather than let that crash the response.
-     */
-    private void setInstanceIfValid(ProblemDetail problem, WebRequest request) {
-        String uri = request.getDescription(false).replaceFirst("^uri=", "");
-        try {
-            problem.setInstance(URI.create(uri));
-        } catch (IllegalArgumentException ex) {
-            log.warn("Could not build a ProblemDetail 'instance' URI from request description '{}': {}", uri, ex.getMessage());
-        }
+    private void logHandling(Exception ex, WebRequest request) {
+        log.debug("Resolving {} for request {}", ex.getClass().getSimpleName(),
+            LogSanitizer.sanitize(request.getDescription(false)));
     }
 
     private void logError(HttpStatus status, ErrorCode errorCode, String message, Throwable cause) {
         String traceId = traceIdProvider.currentTraceId();
-        if (status.is5xxServerError()) {
-            log.error("errorCode={} status={} traceId={} message={}", errorCode.name(), status.value(), traceId, message, cause);
-        } else {
-            log.warn("errorCode={} status={} traceId={} message={}", errorCode.name(), status.value(), traceId, message);
+        var event = status.is5xxServerError() ? log.atError() : log.atWarn();
+        event.addKeyValue("errorCode", errorCode.name())
+            .addKeyValue("httpStatus", status.value())
+            .addKeyValue("traceId", traceId);
+        if (cause != null && status.is5xxServerError()) {
+            event.setCause(cause);
         }
+        event.log("errorCode={} status={} traceId={} message={}",
+            errorCode.name(), status.value(), traceId, LogSanitizer.sanitize(message));
     }
 
     private FieldErrorDetail toFieldErrorDetail(ConstraintViolation<?> violation) {
@@ -195,6 +229,7 @@ public class GlobalExceptionHandler implements Ordered {
     }
 
     private FieldErrorDetail toFieldErrorDetail(String field, String message, Object rejectedValue) {
-        return new FieldErrorDetail(field, message, includeRejectedValue ? rejectedValue : null);
+        Object value = includeRejectedValue ? redactor.redactIfSensitive(field, rejectedValue) : null;
+        return new FieldErrorDetail(field, message, value);
     }
 }

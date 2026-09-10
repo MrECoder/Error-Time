@@ -56,7 +56,9 @@ class GlobalExceptionHandlerIntegrationTest {
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"))
             .andExpect(jsonPath("$.traceId").value("test-trace-id"))
-            .andExpect(jsonPath("$.detail").value("widget with id '42' was not found"));
+            .andExpect(jsonPath("$.detail").value("widget with id '42' was not found"))
+            .andExpect(jsonPath("$.type").value("about:blank"))
+            .andExpect(jsonPath("$.stackTrace").doesNotExist());
 
         assertThat(meterRegistry.get("app.errors").tag("errorCode", "RESOURCE_NOT_FOUND").counter().count())
             .isEqualTo(1.0);

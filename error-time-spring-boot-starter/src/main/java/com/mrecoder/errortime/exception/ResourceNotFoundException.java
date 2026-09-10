@@ -13,11 +13,19 @@ public class ResourceNotFoundException extends AppException {
         super(CommonErrorCode.RESOURCE_NOT_FOUND, message);
     }
 
-    public static ResourceNotFoundException of(String resourceType, Object id) {
-        return new ResourceNotFoundException("%s with id '%s' was not found".formatted(resourceType, id));
+    public ResourceNotFoundException(String message, Throwable cause) {
+        super(CommonErrorCode.RESOURCE_NOT_FOUND, message, Map.of(), cause);
     }
 
     public ResourceNotFoundException(String message, Map<String, Object> details) {
         super(CommonErrorCode.RESOURCE_NOT_FOUND, message, details);
+    }
+
+    public ResourceNotFoundException(String message, Map<String, Object> details, Throwable cause) {
+        super(CommonErrorCode.RESOURCE_NOT_FOUND, message, details, cause);
+    }
+
+    public static ResourceNotFoundException of(String resourceType, Object id) {
+        return new ResourceNotFoundException("%s with id '%s' was not found".formatted(resourceType, id));
     }
 }

@@ -6,6 +6,7 @@ import com.mrecoder.errortime.metrics.ErrorMetrics;
 import com.mrecoder.errortime.tracing.TraceIdProvider;
 import feign.RequestInterceptor;
 import feign.codec.ErrorDecoder;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -29,6 +30,7 @@ import org.springframework.context.annotation.Bean;
 @ConditionalOnClass({ErrorDecoder.class, RequestInterceptor.class})
 @ConditionalOnProperty(prefix = "errortime.feign", name = "enabled", matchIfMissing = true)
 @EnableConfigurationProperties(ErrorTimeProperties.class)
+@Slf4j
 public class ErrorTimeFeignAutoConfiguration {
 
     @Bean
@@ -36,6 +38,8 @@ public class ErrorTimeFeignAutoConfiguration {
     FeignErrorDecoder errorTimeFeignErrorDecoder(
             TraceIdProvider traceIdProvider, ErrorMetrics errorMetrics, ErrorTimeProperties properties) {
         ErrorTimeProperties.Feign feign = properties.getFeign();
+        log.info("Error-Time Feign integration activated (traceIdHeader={}, logResponseBody={})",
+            feign.getTraceIdHeader(), feign.isLogResponseBody());
         return new FeignErrorDecoder(traceIdProvider, errorMetrics, feign.isLogResponseBody(), feign.getMaxLoggedBodyChars());
     }
 

@@ -1,6 +1,7 @@
 package com.mrecoder.errortime.retry;
 
 import com.mrecoder.errortime.exception.AppException;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Transport-agnostic "is this worth retrying" policy, so AMQP listeners,
@@ -10,12 +11,15 @@ import com.mrecoder.errortime.exception.AppException;
  * {@link AppException} (a bug, not a classified failure) is treated as
  * retryable by default - there's no basis to assume otherwise.
  */
+@Slf4j
 public final class RetryClassifier {
 
     private RetryClassifier() {
     }
 
     public static boolean isRetryable(Throwable t) {
-        return !(t instanceof AppException app) || app.isRetryable();
+        boolean retryable = !(t instanceof AppException app) || app.isRetryable();
+        log.debug("Classified {} as {}", t.getClass().getSimpleName(), retryable ? "retryable" : "not retryable");
+        return retryable;
     }
 }

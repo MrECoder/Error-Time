@@ -1,8 +1,10 @@
 package com.mrecoder.errortime.autoconfigure;
 
 import com.mrecoder.errortime.metrics.ErrorMetrics;
+import com.mrecoder.errortime.support.SensitiveDataRedactor;
 import com.mrecoder.errortime.tracing.TraceIdProvider;
 import com.mrecoder.errortime.web.GlobalExceptionHandler;
+import com.mrecoder.errortime.web.ProblemDetailFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -31,10 +33,26 @@ public class ErrorTimeWebAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    GlobalExceptionHandler errorTimeGlobalExceptionHandler(
-            TraceIdProvider traceIdProvider, ErrorMetrics errorMetrics, ErrorTimeProperties properties) {
+    ProblemDetailFactory errorTimeProblemDetailFactory(TraceIdProvider traceIdProvider, ErrorTimeProperties properties) {
         ErrorTimeProperties.Web web = properties.getWeb();
-        return new GlobalExceptionHandler(traceIdProvider, errorMetrics,
-            web.getProblemTypeBaseUri(), web.isIncludeRejectedValue(), web.getOrder());
+        return new ProblemDetailFactory(
+            traceIdProvider, web.getProblemTypeBaseUri(), web.isIncludeStackTrace(), web.getStackTraceMaxFrames());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    SensitiveDataRedactor errorTimeSensitiveDataRedactor(ErrorTimeProperties properties) {
+        ErrorTimeProperties.Web web = properties.getWeb();
+        return new SensitiveDataRedactor(web.isRedactSensitiveFields(), web.getAdditionalRedactedFieldMarkers());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    GlobalExceptionHandler errorTimeGlobalExceptionHandler(
+            TraceIdProvider traceIdProvider, ErrorMetrics errorMetrics, ProblemDetailFactory problemDetailFactory,
+            SensitiveDataRedactor redactor, ErrorTimeProperties properties) {
+        ErrorTimeProperties.Web web = properties.getWeb();
+        return new GlobalExceptionHandler(traceIdProvider, errorMetrics, problemDetailFactory,
+            web.isIncludeRejectedValue(), web.getOrder(), redactor);
     }
 }

@@ -4,6 +4,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.core.Ordered;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 
 /** Configuration surface for {@code error-time-spring-boot-starter}, prefix {@code errortime}. */
 @ConfigurationProperties(prefix = "errortime")
@@ -13,6 +15,7 @@ public class ErrorTimeProperties {
     private final Feign feign = new Feign();
     private final Metrics metrics = new Metrics();
     private final Tracing tracing = new Tracing();
+    private final Resilience resilience = new Resilience();
 
     public Web getWeb() {
         return web;
@@ -28,6 +31,10 @@ public class ErrorTimeProperties {
 
     public Tracing getTracing() {
         return tracing;
+    }
+
+    public Resilience getResilience() {
+        return resilience;
     }
 
     public static class Web {
@@ -52,6 +59,30 @@ public class ErrorTimeProperties {
 
         /** {@link org.springframework.core.annotation.Order} of the advice, so a consumer's own advice can take precedence. */
         private int order = Ordered.LOWEST_PRECEDENCE;
+
+        /**
+         * Whether a {@code stackTrace} property (the failing exception, capped at
+         * {@link #stackTraceMaxFrames} frames) is added to 5xx responses. Off by
+         * default and meant only for local/dev troubleshooting - a stack trace in
+         * an HTTP response discloses package structure and library versions to
+         * whoever can see the response. Never enable this in production.
+         */
+        private boolean includeStackTrace = false;
+
+        /** Caps how many stack frames {@link #includeStackTrace} adds, when enabled. */
+        private int stackTraceMaxFrames = 10;
+
+        /**
+         * Whether field/detail names matching a sensitive-data marker (password,
+         * token, secret, ssn, ...) are always redacted to {@code "[REDACTED]"},
+         * regardless of {@link #includeRejectedValue} or what a consumer put in an
+         * {@code AppException}'s details map. On by default - a shared library
+         * should fail safe here.
+         */
+        private boolean redactSensitiveFields = true;
+
+        /** Extra field-name markers (matched case-insensitively as a substring) merged with the built-in list. */
+        private List<String> additionalRedactedFieldMarkers = new ArrayList<>();
 
         public boolean isEnabled() {
             return enabled;
@@ -83,6 +114,38 @@ public class ErrorTimeProperties {
 
         public void setOrder(int order) {
             this.order = order;
+        }
+
+        public boolean isIncludeStackTrace() {
+            return includeStackTrace;
+        }
+
+        public void setIncludeStackTrace(boolean includeStackTrace) {
+            this.includeStackTrace = includeStackTrace;
+        }
+
+        public int getStackTraceMaxFrames() {
+            return stackTraceMaxFrames;
+        }
+
+        public void setStackTraceMaxFrames(int stackTraceMaxFrames) {
+            this.stackTraceMaxFrames = stackTraceMaxFrames;
+        }
+
+        public boolean isRedactSensitiveFields() {
+            return redactSensitiveFields;
+        }
+
+        public void setRedactSensitiveFields(boolean redactSensitiveFields) {
+            this.redactSensitiveFields = redactSensitiveFields;
+        }
+
+        public List<String> getAdditionalRedactedFieldMarkers() {
+            return additionalRedactedFieldMarkers;
+        }
+
+        public void setAdditionalRedactedFieldMarkers(List<String> additionalRedactedFieldMarkers) {
+            this.additionalRedactedFieldMarkers = additionalRedactedFieldMarkers;
         }
     }
 
@@ -159,6 +222,20 @@ public class ErrorTimeProperties {
 
         public void setUnavailableValue(String unavailableValue) {
             this.unavailableValue = unavailableValue;
+        }
+    }
+
+    public static class Resilience {
+
+        /** Whether Resilience4j's {@code CallNotPermittedException} is mapped to a 503 ProblemDetail. */
+        private boolean enabled = true;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
         }
     }
 }
