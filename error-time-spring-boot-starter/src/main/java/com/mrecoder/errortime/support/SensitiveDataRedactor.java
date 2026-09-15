@@ -22,7 +22,8 @@ public final class SensitiveDataRedactor {
     private static final Set<String> DEFAULT_MARKERS = Set.of(
         "password", "passwd", "pwd", "secret", "token", "apikey", "api-key", "api_key",
         "authorization", "credential", "ssn", "socialsecurity", "creditcard", "credit-card",
-        "cvv", "cvc", "pin", "privatekey", "private-key");
+        "cvv", "cvc", "pin", "privatekey", "private-key",
+        "email", "phone", "address", "dob", "dateofbirth", "iban", "accountnumber", "routingnumber");
 
     private final boolean enabled;
     private final Set<String> markers;

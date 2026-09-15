@@ -77,6 +77,14 @@
       <groupId>io.micrometer</groupId>
       <artifactId>micrometer-registry-prometheus</artifactId>
     </dependency>
+    <!-- Protects the actuator endpoints that leak internal information
+         (prometheus, metrics) - see SecurityConfig. Without this, every
+         actuator endpoint enabled above is reachable by anyone who can
+         reach the port. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.springframework.boot</groupId>

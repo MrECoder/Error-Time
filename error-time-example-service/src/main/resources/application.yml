@@ -9,8 +9,20 @@ spring:
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
+    # guest/guest is RabbitMQ's own well-known default (and restricted to
+    # localhost connections by RabbitMQ itself) - fine for local dev, but
+    # RabbitCredentialsWarner logs a WARN at startup if this default is still
+    # in effect, since relying on it anywhere that restriction doesn't hold
+    # is a real risk. Always override via env vars outside local dev.
     username: ${RABBITMQ_USERNAME:guest}
     password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        # Bounds how many messages/threads a flood can occupy at once,
+        # independent of the broker-side queue cap in RabbitTopologyConfig.
+        concurrency: 1
+        max-concurrency: 5
+        prefetch: 10
 
 downstream:
   service:

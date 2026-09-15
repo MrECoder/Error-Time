@@ -145,6 +145,7 @@ Beyond the redaction, log-sanitization, and opt-in-stack-trace behavior already 
 
 - **Downstream response bodies never reach a caller.** `FeignErrorDecoder` never embeds a downstream service's response body in the exception message that becomes `ProblemDetail.detail` - only the internal log line does, and only when `errortime.feign.log-response-body=true`. A downstream service is not a trusted input source for what a *different* caller of *your* service gets to see.
 - **Nothing here needs a stack trace to be useful.** `errortime.web.include-stack-trace` exists for local troubleshooting; leaving it off (the default) costs you nothing in the normal error-handling path.
+- **`SensitiveDataRedactor`'s default marker list covers common PII, not just credentials** - `email`, `phone`, `address`, `dob`/`date-of-birth`, `iban`, `account-number`, `routing-number` are redacted by default alongside `password`/`token`/`secret`/`ssn`/etc. Still not exhaustive for every domain - add your own via `errortime.web.additional-redacted-field-markers`.
 - See [`SECURITY.md`](SECURITY.md) for the vulnerability disclosure process and this project's specific threat-model notes.
 - **Dependency scanning**: not run as part of every build (it needs network access to the NVD/OSS Index, which a `mvn verify` shouldn't silently depend on), but wired up and ready:
   ```
@@ -184,6 +185,15 @@ logging:
   pattern:
     level: "%5p [${spring.application.name},%X{traceId:-},%X{spanId:-}]"
 ```
+
+### Example service hardening
+
+The example module is a demo of the *library*, not of application security - but a few things here are worth calling out since "copy this pattern into a real service" is exactly how demo code ends up in production:
+
+- **AMQP messages are JSON, not Java-serialized.** `RabbitTopologyConfig` registers a `JacksonJsonMessageConverter`, so `OrderEvent` round-trips as JSON. Without it, Spring AMQP's default `SimpleMessageConverter` would deserialize a `Serializable` payload via raw `ObjectInputStream.readObject()` - a deserialization-gadget-chain RCE risk (CWE-502) the moment the broker is reachable by anyone untrusted. `OrderEvent` deliberately isn't `Serializable`.
+- **The event queue and its DLQ are capped** (`maxLength` + `reject-publish` overflow in `RabbitTopologyConfig`, plus bounded listener `concurrency`/`prefetch` in `application.yml`) so a flood of messages can't grow broker memory or tie up every consumer thread unboundedly.
+- **`guest`/`guest` still works locally, loudly.** `RabbitCredentialsWarner` logs a `WARN` at startup if the default RabbitMQ credentials are still in effect - fine for local dev (RabbitMQ itself restricts `guest` to localhost), a real risk anywhere that restriction doesn't hold. Override `RABBITMQ_USERNAME`/`RABBITMQ_PASSWORD` outside local development.
+- **The actuator endpoints that leak internal data require authentication.** `SecurityConfig` leaves `/demo/**` and `/actuator/health`/`/actuator/info` public, and requires HTTP Basic auth for everything else - `/actuator/prometheus` and `/actuator/metrics` in particular, both of which expose error rates and internal topology. No password is configured, so Spring Boot generates and logs a random one at startup (`Using generated security password: ...`); set `SPRING_SECURITY_USER_NAME`/`SPRING_SECURITY_USER_PASSWORD` for a stable one instead of reading the log every restart.
 
 ### Demo endpoints
 

@@ -20,6 +20,17 @@ class SensitiveDataRedactorTest {
     }
 
     @Test
+    void redactsCommonPiiFieldNamesTooNotJustCredentials() {
+        assertThat(redactor.isSensitive("email")).isTrue();
+        assertThat(redactor.isSensitive("customerEmail")).isTrue();
+        assertThat(redactor.isSensitive("phoneNumber")).isTrue();
+        assertThat(redactor.isSensitive("homeAddress")).isTrue();
+        assertThat(redactor.isSensitive("dateOfBirth")).isTrue();
+        assertThat(redactor.isSensitive("iban")).isTrue();
+        assertThat(redactor.isSensitive("accountNumber")).isTrue();
+    }
+
+    @Test
     void leavesOrdinaryFieldNamesAlone() {
         assertThat(redactor.isSensitive("username")).isFalse();
         assertThat(redactor.isSensitive("orderId")).isFalse();
