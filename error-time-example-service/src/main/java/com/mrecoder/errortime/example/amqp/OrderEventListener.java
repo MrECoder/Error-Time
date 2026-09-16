@@ -6,6 +6,7 @@ import com.mrecoder.errortime.exception.AppException;
 import com.mrecoder.errortime.exception.InternalServiceException;
 import com.mrecoder.errortime.exception.ValidationException;
 import com.mrecoder.errortime.metrics.ErrorMetrics;
+import com.mrecoder.errortime.support.LogSanitizer;
 import com.mrecoder.errortime.tracing.TraceIdProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -46,8 +47,8 @@ public class OrderEventListener {
             recordFailure(event, ex);
             throw ex;
         } catch (Exception ex) {
-            InternalServiceException wrapped =
-                new InternalServiceException("Unexpected failure processing order event " + event.orderId(), ex);
+            InternalServiceException wrapped = new InternalServiceException(
+                "Unexpected failure processing order event " + LogSanitizer.sanitize(event.orderId()), ex);
             recordFailure(event, wrapped);
             throw wrapped;
         }
@@ -61,7 +62,7 @@ public class OrderEventListener {
         if (!resourceIds.isEmpty()) {
             List<ResourceResponse> resources = downstreamService.fetchResources(resourceIds);
             log.info("orderId={} resolved {} downstream resource(s) concurrently traceId={}",
-                event.orderId(), resources.size(), traceIdProvider.currentTraceId());
+                LogSanitizer.sanitize(event.orderId()), resources.size(), traceIdProvider.currentTraceId());
         }
         // Further order processing (persistence, follow-up events) would happen here;
         // this stays a scaffold for the error-handling paths.
@@ -69,7 +70,8 @@ public class OrderEventListener {
 
     private void recordFailure(OrderEvent event, AppException ex) {
         log.error("AMQP listener failure errorCode={} orderId={} traceId={} message={}",
-            ex.getErrorCode(), event.orderId(), traceIdProvider.currentTraceId(), ex.getMessage(), ex);
+            ex.getErrorCode(), LogSanitizer.sanitize(event.orderId()), traceIdProvider.currentTraceId(),
+            LogSanitizer.sanitize(ex.getMessage()), ex);
         errorMetrics.recordDownstreamError(SOURCE, ex.getErrorCode());
     }
 }
