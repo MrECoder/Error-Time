@@ -1,5 +1,6 @@
 package com.mrecoder.errortime.feign;
 
+import com.mrecoder.errortime.support.LogSanitizer;
 import com.mrecoder.errortime.tracing.TraceIdProvider;
 import feign.RequestInterceptor;
 import feign.RequestTemplate;
@@ -30,7 +31,8 @@ public class TraceIdPropagationInterceptor implements RequestInterceptor {
     @Override
     public void apply(RequestTemplate template) {
         String traceId = traceIdProvider.currentTraceId();
-        log.debug("Propagating traceId={} via header {} to {}", traceId, traceIdHeader, template.url());
+        log.debug("Propagating traceId={} via header {} to {}",
+            traceId, traceIdHeader, LogSanitizer.sanitize(template.url()));
         template.header(traceIdHeader, traceId);
     }
 }
