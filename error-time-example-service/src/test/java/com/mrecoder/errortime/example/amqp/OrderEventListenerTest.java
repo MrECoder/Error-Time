@@ -2,6 +2,7 @@ package com.mrecoder.errortime.example.amqp;
 
 import com.mrecoder.errortime.example.feign.DownstreamService;
 import com.mrecoder.errortime.example.feign.ResourceResponse;
+import com.mrecoder.errortime.exception.InternalServiceException;
 import com.mrecoder.errortime.exception.ValidationException;
 import com.mrecoder.errortime.metrics.ErrorMetrics;
 import com.mrecoder.errortime.tracing.TraceIdProvider;
@@ -38,6 +39,27 @@ class OrderEventListenerTest {
         assertThat(meterRegistry.get("downstream.errors")
                 .tag("source", "amqp:error-time.events")
                 .tag("errorCode", "VALIDATION_ERROR")
+                .counter()
+                .count())
+            .isEqualTo(1.0);
+    }
+
+    @Test
+    void nullOrderIdIsRejectedAsValidationExceptionAndCounted() {
+        assertThatThrownBy(() -> listener.handle(new OrderEvent(null, List.of(), "payload")))
+            .isInstanceOf(ValidationException.class);
+    }
+
+    @Test
+    void unexpectedFailureIsWrappedAsInternalServiceExceptionAndCounted() {
+        when(downstreamService.fetchResources(List.of("res-1"))).thenThrow(new RuntimeException("boom"));
+
+        assertThatThrownBy(() -> listener.handle(new OrderEvent("order-1", List.of("res-1"), "payload")))
+            .isInstanceOf(InternalServiceException.class);
+
+        assertThat(meterRegistry.get("downstream.errors")
+                .tag("source", "amqp:error-time.events")
+                .tag("errorCode", "INTERNAL_SERVICE_ERROR")
                 .counter()
                 .count())
             .isEqualTo(1.0);

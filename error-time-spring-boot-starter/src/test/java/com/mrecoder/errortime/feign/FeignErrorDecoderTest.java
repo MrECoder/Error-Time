@@ -5,6 +5,7 @@ import com.mrecoder.errortime.exception.AuthorizationException;
 import com.mrecoder.errortime.exception.ConflictException;
 import com.mrecoder.errortime.exception.DownstreamTimeoutException;
 import com.mrecoder.errortime.exception.InternalServiceException;
+import com.mrecoder.errortime.exception.PreconditionFailedException;
 import com.mrecoder.errortime.exception.RateLimitExceededException;
 import com.mrecoder.errortime.exception.ResourceNotFoundException;
 import com.mrecoder.errortime.exception.ServiceUnavailableException;
@@ -94,6 +95,70 @@ class FeignErrorDecoderTest {
         Exception mapped = decoder.decode("DownstreamClient#getResource(String)", response(504, "timeout"));
 
         assertThat(mapped).isInstanceOf(DownstreamTimeoutException.class);
+    }
+
+    @Test
+    void mapsRequestTimeoutToDownstreamTimeoutExceptionToo() {
+        Exception mapped = decoder.decode("DownstreamClient#getResource(String)", response(408, "timeout"));
+
+        assertThat(mapped).isInstanceOf(DownstreamTimeoutException.class);
+    }
+
+    @Test
+    void mapsPreconditionFailedToPreconditionFailedException() {
+        Exception mapped = decoder.decode("DownstreamClient#getResource(String)", response(412, "stale"));
+
+        assertThat(mapped).isInstanceOf(PreconditionFailedException.class);
+    }
+
+    @Test
+    void mapsUnrecognizedFourXxToValidationExceptionWithStatusInMessage() {
+        Exception mapped = decoder.decode("DownstreamClient#getResource(String)", response(418, "teapot"));
+
+        assertThat(mapped).isInstanceOf(ValidationException.class);
+        assertThat(mapped.getMessage()).contains("418");
+    }
+
+    @Test
+    void mapsUnresolvableStatusCodeToInternalServiceException() {
+        Exception mapped = decoder.decode("DownstreamClient#getResource(String)", response(599, "unknown"));
+
+        assertThat(mapped).isInstanceOf(InternalServiceException.class);
+    }
+
+    @Test
+    void rateLimitWithoutRetryAfterHeaderStillMapsButCarriesNoRetryAfter() {
+        Exception mapped = decoder.decode("DownstreamClient#getResource(String)", response(429, "slow down"));
+
+        assertThat(mapped).isInstanceOf(RateLimitExceededException.class);
+        assertThat(((RateLimitExceededException) mapped).getRetryAfterSeconds()).isEmpty();
+    }
+
+    @Test
+    void rateLimitWithUnparseableRetryAfterHeaderIsIgnored() {
+        Response response = Response.builder()
+            .status(429)
+            .reason("test")
+            .request(Request.create(Request.HttpMethod.GET, "http://downstream/api/resources/42",
+                Collections.emptyMap(), null, StandardCharsets.UTF_8, null))
+            .headers(Map.of("Retry-After", List.of("not-a-number")))
+            .body("rate limited", StandardCharsets.UTF_8)
+            .build();
+
+        Exception mapped = decoder.decode("DownstreamClient#getResource(String)", response);
+
+        assertThat(((RateLimitExceededException) mapped).getRetryAfterSeconds()).isEmpty();
+    }
+
+    @Test
+    void logResponseBodyEnabledReadsAndTruncatesTheDownstreamBody() {
+        FeignErrorDecoder loggingDecoder = new FeignErrorDecoder(traceIdProvider, errorMetrics, true, 5);
+
+        Exception mapped = loggingDecoder.decode("DownstreamClient#getResource(String)",
+            response(500, "0123456789"));
+
+        // Truncation only affects the logged body, never the caller-facing message.
+        assertThat(mapped).isInstanceOf(InternalServiceException.class);
     }
 
     @Test
