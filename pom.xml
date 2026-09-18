@@ -116,11 +116,37 @@
         </plugin>
         <!-- Not bound to any phase - deliberately requires network access to the
              NVD/OSS Index, which a normal `mvn verify` shouldn't depend on.
-             Run explicitly: mvn org.owasp:dependency-check-maven:check -->
+             Run explicitly: mvn org.owasp:dependency-check-maven:aggregate
+             (aggregate, not check, so a reactor build produces one combined
+             report instead of a separate one per module). CI runs this on
+             every push/PR - see .github/workflows/ci.yml's "cve-scan" job -
+             and REQUIRES -DnvdApiKey=... : as of the NVD API 2.0 client this
+             plugin version bundles, an unauthenticated request is rejected
+             outright rather than merely rate-limited (confirmed empirically -
+             this is not just older advice going stale). Request a free key at
+             https://nvd.nist.gov/developers/request-an-api-key. -->
         <plugin>
           <groupId>org.owasp</groupId>
           <artifactId>dependency-check-maven</artifactId>
           <version>13.0.0</version>
+          <configuration>
+            <!-- Fails the build only on High/Critical (CVSS v3 >= 7) so the
+                 gate flags real risk without drowning in every Low/Medium
+                 finding across the dependency tree; adjust per the project's
+                 own risk tolerance. -->
+            <failBuildOnCVSS>7</failBuildOnCVSS>
+            <formats>
+              <format>HTML</format>
+              <format>SARIF</format>
+            </formats>
+            <!-- Empty by default - add an entry here (with a dated comment
+                 explaining why) only for a confirmed false positive or an
+                 accepted/mitigated risk, never to silence an unreviewed
+                 finding. -->
+            <suppressionFiles>
+              <suppressionFile>${maven.multiModuleProjectDirectory}/owasp-suppressions.xml</suppressionFile>
+            </suppressionFiles>
+          </configuration>
         </plugin>
         <plugin>
           <groupId>org.jacoco</groupId>
