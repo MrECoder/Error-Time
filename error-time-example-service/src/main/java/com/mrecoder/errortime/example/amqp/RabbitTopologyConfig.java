@@ -38,10 +38,20 @@ public class RabbitTopologyConfig {
      * ({@code ObjectInputStream.readObject()}) - a deserialization-gadget
      * RCE risk (CWE-502) for anything arriving from a queue an untrusted
      * party can publish to. JSON has no such risk.
+     *
+     * <p>The trusted-package allowlist is a second, independent guard against
+     * the same class of attack: the converter only ever deserializes into a
+     * type named by the message's own {@code __TypeId__} header, so without
+     * this, a crafted message naming an unrelated, dangerous class on the
+     * classpath could still trigger a polymorphic-deserialization gadget
+     * chain even though the format is JSON, not Java serialization. Scoped
+     * to {@link OrderEvent}'s package specifically, not the whole
+     * application, so adding an unrelated class elsewhere doesn't silently
+     * widen what a queue message is trusted to deserialize into.
      */
     @Bean
     MessageConverter jsonMessageConverter() {
-        return new JacksonJsonMessageConverter();
+        return new JacksonJsonMessageConverter(OrderEvent.class.getPackageName());
     }
 
     @Bean
